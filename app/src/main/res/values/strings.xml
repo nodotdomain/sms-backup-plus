@@ -51,6 +51,11 @@
   <string name="status_auth_failure">Login error</string>
   <string name="notification_auth_failure">SMSBackup+ login error</string>
 
+  <string name="status_permission_problem">Permission problem</string>
+  <string name="status_permission_problem_details">Lorem ipsum dolor sit amet.</string>
+  <string name="notification_missing_permission">SMSBackup+ permission problem</string>
+  <string name="notification_missing_permission_text">Lorem ipsum dolor sit amet.</string>
+
   <string name="status_auth_failure_details_xoauth">XOAuth authorization error. Please make sure you enabled IMAP in your Gmail account settings.</string>
   <string name="status_auth_failure_details_plain">IMAP authorization error.
   Make sure login and password are set correctly.</string>

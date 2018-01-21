@@ -235,6 +235,11 @@ public class StatusPreference extends Preference implements View.OnClickListener
         }
     }
 
+    private void permissionProblem() {
+        statusLabel.setText(R.string.status_permission_problem);
+        syncDetailsLabel.setText(R.string.status_permission_problem_details);
+    }
+
     private void calc() {
         statusLabel.setText(R.string.status_working);
         syncDetailsLabel.setText(R.string.status_calc_details);
@@ -299,6 +304,8 @@ public class StatusPreference extends Preference implements View.OnClickListener
             case ERROR:
                 if (state.isAuthException()) {
                     authFailed();
+                } else if (state.isPermissionException()) {
+                    permissionProblem();
                 } else {
                     final String errorMessage = state.getErrorMessage(getContext().getResources());
                     statusLabel.setText(R.string.status_unknown_error);

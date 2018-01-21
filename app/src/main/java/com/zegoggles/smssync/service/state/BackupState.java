@@ -4,6 +4,7 @@ import android.content.res.Resources;
 import com.zegoggles.smssync.R;
 import com.zegoggles.smssync.mail.DataType;
 import com.zegoggles.smssync.service.BackupType;
+import com.zegoggles.smssync.service.exception.MissingPermissionException;
 
 import static com.zegoggles.smssync.service.BackupType.UNKNOWN;
 import static com.zegoggles.smssync.service.state.SmsSyncState.BACKUP;
@@ -58,6 +59,15 @@ public class BackupState extends State {
             return label;
         } else {
             return "";
+        }
+    }
+
+    public String[] getMissingPermissions() {
+        if (exception instanceof MissingPermissionException) {
+            MissingPermissionException mpe = (MissingPermissionException)exception;
+            return mpe.permissions.toArray(new String[mpe.permissions.size()]);
+        } else {
+            return new String[0];
         }
     }
 }

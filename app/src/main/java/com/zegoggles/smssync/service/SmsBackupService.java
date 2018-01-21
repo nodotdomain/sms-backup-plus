@@ -16,12 +16,13 @@
 
 package com.zegoggles.smssync.service;
 
-import android.app.Notification;
 import android.content.Intent;
 import android.net.NetworkInfo;
+import android.os.Bundle;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.v4.app.NotificationCompat;
+import android.support.v4.content.ContextCompat;
 import android.text.format.DateFormat;
 import android.util.Log;
 import com.firebase.jobdispatcher.Job;
@@ -32,10 +33,12 @@ import com.squareup.otto.Subscribe;
 import com.zegoggles.smssync.App;
 import com.zegoggles.smssync.Consts;
 import com.zegoggles.smssync.R;
+import com.zegoggles.smssync.activity.MainActivity;
 import com.zegoggles.smssync.mail.BackupImapStore;
 import com.zegoggles.smssync.mail.DataType;
 import com.zegoggles.smssync.service.exception.BackupDisabledException;
 import com.zegoggles.smssync.service.exception.ConnectivityException;
+import com.zegoggles.smssync.service.exception.MissingPermissionException;
 import com.zegoggles.smssync.service.exception.NoConnectionException;
 import com.zegoggles.smssync.service.exception.RequiresLoginException;
 import com.zegoggles.smssync.service.exception.RequiresWifiException;
@@ -44,7 +47,11 @@ import com.zegoggles.smssync.service.state.SmsSyncState;
 
 import java.util.Date;
 import java.util.EnumSet;
+import java.util.HashSet;
+import java.util.Set;
 
+import static android.R.drawable.stat_sys_warning;
+import static android.content.pm.PackageManager.PERMISSION_DENIED;
 import static com.zegoggles.smssync.App.LOCAL_LOGV;
 import static com.zegoggles.smssync.App.TAG;
 import static com.zegoggles.smssync.service.BackupType.MANUAL;
@@ -103,6 +110,7 @@ public class SmsBackupService extends ServiceBase {
             // set initial state
             mState = new BackupState(INITIAL, 0, 0, backupType, null, null);
             EnumSet<DataType> enabledTypes = getEnabledBackupTypes();
+            checkPermissions(enabledTypes);
             if (!skip) {
                 checkCredentials();
                 checkConnectivity(backupType);
@@ -120,6 +128,22 @@ public class SmsBackupService extends ServiceBase {
             moveToState(mState.transition(ERROR, e));
         } catch (BackupDisabledException e) {
             moveToState(mState.transition(FINISHED_BACKUP, e));
+        } catch (MissingPermissionException e) {
+            moveToState(mState.transition(ERROR, e));
+        }
+    }
+
+    private void checkPermissions(EnumSet<DataType> enabledTypes) throws MissingPermissionException {
+        Set<String> missing = new HashSet<String>();
+        for (DataType dataType : enabledTypes) {
+            for (String permission : dataType.requiredPermissions) {
+                if (ContextCompat.checkSelfPermission(this, permission) == PERMISSION_DENIED) {
+                    missing.add(permission);
+                }
+            }
+        }
+        if (!missing.isEmpty()) {
+            throw new MissingPermissionException(missing);
         }
     }
 
@@ -214,21 +238,29 @@ public class SmsBackupService extends ServiceBase {
             appLog(R.string.app_log_backup_failed_authentication, state.getDetailedErrorMessage(getResources()));
 
             if (shouldNotifyUser(state)) {
-                notifyUser(android.R.drawable.stat_sys_warning,
-                    NOTIFICATION_ID_WARNING,
+                notifyUser(NOTIFICATION_ID_WARNING, notificationBuilder(stat_sys_warning,
                     getString(R.string.notification_auth_failure),
-                    getString(getAuthPreferences().useXOAuth() ? R.string.status_auth_failure_details_xoauth : R.string.status_auth_failure_details_plain));
+                    getString(getAuthPreferences().useXOAuth() ? R.string.status_auth_failure_details_xoauth : R.string.status_auth_failure_details_plain)));
             }
         } else if (state.isConnectivityError()) {
             appLog(R.string.app_log_backup_failed_connectivity, state.getDetailedErrorMessage(getResources()));
+        } else if (state.isPermissionException()) {
+            if (state.backupType != MANUAL) {
+                Bundle extras = new Bundle();
+                extras.putStringArray(MainActivity.EXTRA_PERMISSIONS, state.getMissingPermissions());
+
+                notifyUser(NOTIFICATION_ID_WARNING, notificationBuilder(R.drawable.ic_notification,
+                    getString(R.string.notification_missing_permission),
+                    getString(R.string.notification_missing_permission_text))
+                    .setContentIntent(getPendingIntent(extras)));
+            }
         } else {
             appLog(R.string.app_log_backup_failed_general_error, state.getDetailedErrorMessage(getResources()));
 
             if (shouldNotifyUser(state)) {
-                notifyUser(android.R.drawable.stat_sys_warning,
-                    NOTIFICATION_ID_WARNING,
+                notifyUser(NOTIFICATION_ID_WARNING, notificationBuilder(stat_sys_warning,
                     getString(R.string.notification_general_error),
-                    state.getErrorMessage(getResources()));
+                    state.getErrorMessage(getResources())));
             }
         }
     }
@@ -242,7 +274,7 @@ public class SmsBackupService extends ServiceBase {
         NotificationCompat.Builder builder = createNotification(R.string.status_backup);
         notification = builder.setContentTitle(getString(R.string.status_backup))
                 .setContentText(state.getNotificationLabel(getResources()))
-                .setContentIntent(getPendingIntent())
+                .setContentIntent(getPendingIntent(null))
                 .build();
         startForeground(BACKUP_ID, notification);
     }
@@ -261,18 +293,20 @@ public class SmsBackupService extends ServiceBase {
         } // else job already persisted
     }
 
-    protected void notifyUser(int icon, int notificationId, String title, String text) {
-        Notification n = new NotificationCompat.Builder(this)
-                .setSmallIcon(icon)
-                .setWhen(System.currentTimeMillis())
-                .setOnlyAlertOnce(true)
-                .setAutoCancel(true)
-                .setContentText(text)
-                .setTicker(getString(R.string.app_name))
-                .setContentTitle(title)
-                .setContentIntent(getPendingIntent())
-                .build();
-        getNotifier().notify(notificationId, n);
+    void notifyUser(int notificationId, NotificationCompat.Builder builder) {
+        getNotifier().notify(notificationId, builder.build());
+    }
+
+    private NotificationCompat.Builder notificationBuilder(int icon, String title, String text) {
+        return new NotificationCompat.Builder(this)
+            .setSmallIcon(icon)
+            .setWhen(System.currentTimeMillis())
+            .setOnlyAlertOnce(true)
+            .setAutoCancel(true)
+            .setContentText(text)
+            .setTicker(getString(R.string.app_name))
+            .setContentTitle(title)
+            .setContentIntent(getPendingIntent(null));
     }
 
     protected BackupJobs getBackupJobs() {

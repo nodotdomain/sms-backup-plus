@@ -109,10 +109,11 @@ public class SmsJobService extends JobService {
 
         final JobParameters jobParameters = jobs.remove(state.backupType.name());
         if (jobParameters != null) {
+            final boolean needsReschedule = state.isError() && !state.isPermissionException();
             if (LOCAL_LOGV) {
-                Log.v(TAG, "jobFinished(" + jobParameters + ", isError=" + state.isError() + ")");
+                Log.v(TAG, "jobFinished(" + jobParameters + ", isError=" + state.isError() + ", needsReschedule="+needsReschedule+")");
             }
-            jobFinished(jobParameters, state.isError());
+            jobFinished(jobParameters, needsReschedule);
         } else {
             Log.w(TAG, "unknown job for state "+state);
         }

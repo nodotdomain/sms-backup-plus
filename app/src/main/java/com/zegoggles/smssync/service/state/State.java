@@ -10,6 +10,7 @@ import com.zegoggles.smssync.R;
 import com.zegoggles.smssync.mail.DataType;
 import com.zegoggles.smssync.service.exception.ConnectivityException;
 import com.zegoggles.smssync.service.exception.LocalizableException;
+import com.zegoggles.smssync.service.exception.MissingPermissionException;
 import com.zegoggles.smssync.service.exception.RequiresLoginException;
 
 import java.util.EnumSet;
@@ -78,6 +79,11 @@ public abstract class State {
         return exception instanceof XOAuth2AuthenticationFailedException ||
                exception instanceof AuthenticationFailedException ||
                exception instanceof RequiresLoginException;
+    }
+
+    public boolean isPermissionException() {
+        return exception instanceof SecurityException ||
+               exception instanceof MissingPermissionException;
     }
 
     public boolean isConnectivityError() {
